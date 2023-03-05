@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block content %}
+    {% if object %}
+        <h1>Update <span class="teal-text">{{ object.name }}</span></h1>
+    {% else %}
+        <h1>Add Toy</h1>
+    {% endif %}
+    <!-- By leaving the action empty, this allows the form to submit -->
+    <!-- to the same URL that was used to render it. The submit changes to the HTTP to POST -->
+    <form action="" method="POST">
+        {% csrf_token %}
+        <table>
+            {{ form.as_table }}
+        </table>
+        <input type="submit" value="{% if object %}Update Toy{% else %}Add Toy{% endif %}" class="btn">
+    </form>
+{% endblock %}

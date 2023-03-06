@@ -7,6 +7,12 @@ from .forms import FeedingForm
 import uuid #python package for creating unique identifiers
 import boto3 # what we'll use to connect to s3
 from django.conf import settings
+from django.contrib.auth import login
+from django.contrib.auth.forms import UserCreationForm
+
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
+
 
 AWS_ACCESS_KEY = settings.AWS_ACCESS_KEY
 AWS_SECRET_ACCESS_KEY = settings.AWS_SECRET_ACCESS_KEY
@@ -23,15 +29,18 @@ def about(request):
     return render(request, 'about.html')
 
 #index route for cats
+@login_required
 def cats_index(request):
     # Just like we passed data to our templates in express
     # We pass data to our templates through our view functions
     # We can gather relations from SQL using our model methods
-    cats = Cat.objects.all()
+    # cats = Cat.objects.all()
+    cats = Cat.objects.filter(user=request.user)
     return render(request, 'cats/index.html', { 'cats': cats })
 
 #Detail route for cats
 # Cat_id is defined, expecting an integer, in our URL
+@login_required
 def cats_detail(request, cat_id):
     cat = Cat.objects.get(id=cat_id)
     # Get the toys the cat doesn't have...
@@ -46,7 +55,7 @@ def cats_detail(request, cat_id):
         'toys': toys_cat_doesnt_have
     })
 
-
+@login_required
 def add_feeding(request, cat_id):
     # Create a model form instance form the data in request.POST
     form = FeedingForm(request.POST)
@@ -67,28 +76,32 @@ class CatCreate(CreateView):
     # Same as below =>
     fields = ['name', 'breed', 'description', 'age']
     # success_url = "/cats/{cat_id}"
+    def form_valid(self, form):
+        # we can assign teh logged in user's data(id) to the cat's create form
+        form.instance.user = self.request.user
+        return super().form_valid(form)
 
-class CatUpdate(UpdateView):
+class CatUpdate(LoginRequiredMixin, UpdateView):
     model = Cat
     # custom fields to disallow renaming a cat
     fields = ['breed', 'description', 'age']
 
-class CatDelete(DeleteView):
+class CatDelete(LoginRequiredMixin, DeleteView):
     model = Cat
     #success url, index page
     success_url = '/cats/'
 
 # ToyList
-class ToyList(ListView):
+class ToyList(LoginRequiredMixin, ListView):
     model = Toy
     template_name = 'toys/index.html'
 
 # ToyDetail
-class ToyDetail(DetailView):
+class ToyDetail(LoginRequiredMixin, DetailView):
     model = Toy
     template_name = 'toys/detail.html'
 # ToyCreate
-class ToyCreate(CreateView):
+class ToyCreate(LoginRequiredMixin, CreateView):
     model = Toy
     fields = ['name', 'color']
 
@@ -99,24 +112,27 @@ class ToyCreate(CreateView):
         #Super allows for the original inherited CreateView function to work as it was intended
         return super().form_valid(form)
 # ToyUpdate
-class ToyUpdate(UpdateView):
+class ToyUpdate(LoginRequiredMixin, UpdateView):
     model = Toy
     fields = ['name', 'color']
 
 # ToyDelete
-class ToyDelete(DeleteView):
+class ToyDelete(LoginRequiredMixin, DeleteView):
     model = Toy
     success_url = '/toys/'
 
+@login_required
 def assoc_toy(request, cat_id, toy_id):
     # Note that you can pass a toy's id instead of the whole toy object
     Cat.objects.get(id=cat_id).toys.add(toy_id)
     return redirect('detail', cat_id=cat_id)
 
+@login_required
 def unassoc_toy(request, cat_id, toy_id):
     Cat.objects.get(id=cat_id).toys.remove(toy_id)
     return redirect('detail', cat_id=cat_id)
 
+@login_required
 def add_photo(request, cat_id):
     #photo_file will be the name attribute of our form input
     photo_file = request.FILES.get('photo-file', None)
@@ -144,3 +160,25 @@ def add_photo(request, cat_id):
             return redirect('detail', cat_id=cat_id)
         
     return redirect('detail', cat_id=cat_id)
+
+def signup(request):
+    # this view is going to be like our class-based-views
+    # this is going to be able to handle a GET and a POST request
+    error_message = ''
+    if request.method == 'POST':
+        # this is how to create a user form object that includes data from the browser
+        form = UserCreationForm(request.POST)
+        # now we check validity of the form and handle our success and error situations
+        if form.is_valid():
+            # we'll add the user to the database
+            user = form.save()
+            # then we'll log the user in
+            login(request, user)
+            # redirect to our index page
+            return redirect('index')
+        else:
+            error_message = 'Invalid signup - try again'
+    # a bad POST or GET request will render signup.html with an empty form
+    form = UserCreationForm()
+    context = {'form': form, 'error_message': error_message}
+    return render(request, 'registration/signup.html', context)
